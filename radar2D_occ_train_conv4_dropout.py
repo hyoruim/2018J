@@ -15,7 +15,7 @@ import time
 import cv2
 import glob
 
-folderName = 'Mar29'
+folderName = 'combine'
 signalType = '2Dsignal'
 
 BATCH_SIZE = 16
@@ -31,7 +31,7 @@ TEST_FILE = 'radarOCC_'+folderName+'_'+signalType+'_'+'test.tfrecords'
 CHANNELS = 1 # originally 2 in counterfeit detection
 
 LEARNING_RATE = 1e-4
-NUM_EPOCHS = 500
+NUM_EPOCHS = 2
 
 HIDDEN1_UNITS = [3,3,32]
 MAXPOOL1_UNITS = [2,2]
@@ -234,7 +234,7 @@ def run_training():
 
         # Build a graph that computes predictions from the inference model.
         logits = inference(x, train, HIDDEN1_UNITS, MAXPOOL1_UNITS, HIDDEN2_UNITS, MAXPOOL2_UNITS, HIDDEN3_UNITS, MAXPOOL3_UNITS, HIDDEN4_UNITS, MAXPOOL4_UNITS, FC1_UNITS)
-
+        
         softmaxOut = tf.nn.softmax(logits,name="softmax")
 
         # loss
@@ -341,7 +341,7 @@ def test(filename):
             images = np.array(images)
 
             labels = np.array(labels)
-
+            
             softmax= sess.run([out], feed_dict={train:False, x:images, y:labels})
             softmax = np.squeeze(np.array(softmax),axis=0)
             labels = np.array(labels)
