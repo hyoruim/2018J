@@ -15,25 +15,25 @@ import time
 import cv2
 import glob
 
-folderName = 'combine'
+folderName = 'Feb20'
 signalType = '2Dsignal'
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 IMAGE_HEIGHT = 240
 IMAGE_WIDTH = 770
 
 #tfrecords_path = '/Volumes/My Passport Pro/MISEON_DROPBOX/Dropbox/EWHA/LAB/Top engineering/2019/radar/occupancy/data/' + folderName + '/'
 tfrecords_path = './'
-TRAIN_FILE = 'radarOCC_'+folderName+'_'+signalType+'_'+'train.tfrecords'
-VALID_FILE = 'radarOCC_'+folderName+'_'+signalType+'_'+'validation.tfrecords'
-TEST_FILE = 'radarOCC_'+folderName+'_'+signalType+'_'+'test.tfrecords'
+TRAIN_FILE = tfrecords_path + 'radarOCC_'+folderName+'_'+signalType+'_'+'train.tfrecords'
+VALID_FILE = tfrecords_path + 'radarOCC_'+folderName+'_'+signalType+'_'+'validation.tfrecords'
+TEST_FILE = tfrecords_path + 'radarOCC_'+folderName+'_'+signalType+'_'+'test.tfrecords'
 
 CHANNELS = 1 # originally 2 in counterfeit detection
 
 LEARNING_RATE = 1e-4
-NUM_EPOCHS = 2
+NUM_EPOCHS = 1000
 
-HIDDEN1_UNITS = [3,3,32]
+HIDDEN1_UNITS = [3,3,16]
 MAXPOOL1_UNITS = [2,2]
 HIDDEN2_UNITS = [3,3,32]
 MAXPOOL2_UNITS = [2,2]
@@ -45,7 +45,7 @@ FC1_UNITS = 32
 DROP_PROB = 0.5
 
 FINAL_IMG_HEIGHT = np.uint32(np.ceil(((((((IMAGE_HEIGHT-HIDDEN1_UNITS[0]+1)/MAXPOOL1_UNITS[0] - HIDDEN2_UNITS[0]+1)/MAXPOOL2_UNITS[0]) - HIDDEN3_UNITS[0]+1)/MAXPOOL3_UNITS[0]) - HIDDEN4_UNITS[0]+1)/MAXPOOL4_UNITS[0]))
-FINAL_IMG_WIDTH = np.uint32(np.ceil(((((((IMAGE_WIDTH-HIDDEN1_UNITS[1]+1)/MAXPOOL1_UNITS[1] - HIDDEN2_UNITS[1]+1)/MAXPOOL2_UNITS[1]) - HIDDEN3_UNITS[0]+1)/MAXPOOL3_UNITS[0]) - HIDDEN4_UNITS[0]+1)/MAXPOOL4_UNITS[0]))
+FINAL_IMG_WIDTH = np.uint32(np.ceil(((((((IMAGE_WIDTH-HIDDEN1_UNITS[1]+1)/MAXPOOL1_UNITS[1] - HIDDEN2_UNITS[1]+1)/MAXPOOL2_UNITS[1]) - HIDDEN3_UNITS[1]+1)/MAXPOOL3_UNITS[1]) - HIDDEN4_UNITS[1]+1)/MAXPOOL4_UNITS[1]))
 print(FINAL_IMG_WIDTH)
 print(FINAL_IMG_HEIGHT)
 tf.device('/gpu:0')
@@ -77,7 +77,7 @@ def inference(images, phase, hidden1_units, maxpool1_units, hidden2_units, maxpo
         # Batch normalization should be applied before nonlinearity to be more Gaussian distribution.
         hidden1 = tf.nn.relu(batch_norm1, name='relu1')
 
-    # max pooling
+    # max pooling1
     with tf.name_scope('maxPool1'):
         maxpool1 = tf.layers.max_pooling2d(hidden1, pool_size= maxpool1_units , strides=2, padding='SAME', name="maxpool1")
 
@@ -87,7 +87,7 @@ def inference(images, phase, hidden1_units, maxpool1_units, hidden2_units, maxpo
         batch_norm2 = tf.layers.batch_normalization(conv2, center=True, scale=True, training=phase, name='batch_norm2')
         hidden2 = tf.nn.relu(batch_norm2, name='relu2')
 
-    # maxpooling
+    # maxpooling2
     with tf.name_scope('maxPool2'):
         maxpool2 = tf.layers.max_pooling2d(hidden2, pool_size=maxpool2_units, strides=2, padding="same", name="maxpool2")
 
@@ -97,7 +97,7 @@ def inference(images, phase, hidden1_units, maxpool1_units, hidden2_units, maxpo
         batch_norm3 = tf.layers.batch_normalization(conv3, center=True, scale=True, training=phase, name='batch_norm3')
         hidden3 = tf.nn.relu(batch_norm3, name='relu3')
 
-    # maxpooling
+    # maxpooling3
     with tf.name_scope('maxPool3'):
         maxpool3 = tf.layers.max_pooling2d(hidden3, pool_size=maxpool3_units, strides=2, padding="same", name="maxpool3")
 
@@ -107,10 +107,11 @@ def inference(images, phase, hidden1_units, maxpool1_units, hidden2_units, maxpo
         batch_norm4 = tf.layers.batch_normalization(conv4, center=True, scale=True, training=phase, name='batch_norm4')
         hidden4 = tf.nn.relu(batch_norm4, name='relu4')
 
-    # maxpooling
+    # maxpooling4
     with tf.name_scope('maxPool4'):
         maxpool4 = tf.layers.max_pooling2d(hidden4, pool_size=maxpool4_units, strides=2, padding="same", name="maxpool4")
         print(maxpool4.get_shape())
+
     with tf.name_scope('drop1'):
         drop = tf.layers.dropout(maxpool4, DROP_PROB,training=phase,name="dropout1")
 
@@ -119,16 +120,17 @@ def inference(images, phase, hidden1_units, maxpool1_units, hidden2_units, maxpo
         # Downsampled image due to maxpooling layers
 #       maxPoolSize = np.array(maxpool1_units)*np.array(maxpool2_units)
 #       fcSize = np.int32(np.ceil(np.array([IMAGE_HEIGHT, IMAGE_WIDTH])/maxPoolSize))
-        flat = tf.reshape(drop,[-1,FINAL_IMG_HEIGHT*FINAL_IMG_WIDTH*hidden4_units[2]])
+        flat = tf.reshape(maxpool4,[-1,FINAL_IMG_HEIGHT*FINAL_IMG_WIDTH*hidden4_units[2]])
         print(flat.get_shape())
         dense1 = tf.layers.dense(inputs=flat, units=fc1_units, activation=None,name="fc1")
-        batch_norm3 = tf.layers.batch_normalization(dense1, center=True, scale=True, training=phase, name='batch_norm_fc1')
-        fullyConnected1 = tf.nn.relu(batch_norm3, name='relu_fc2')
+        batch_norm5 = tf.layers.batch_normalization(dense1, center=True, scale=True, training=phase, name='batch_norm_fc1')
+        fullyConnected1 = tf.nn.relu(batch_norm5, name='relu_fc2')
+
 
     # Fully connected layer 2
     with tf.name_scope('FC2'):
         CF_logits = tf.layers.dense(inputs=fullyConnected1, units=2, activation = None,name="logits")
-        print(CF_logits)
+
     return CF_logits
 
 
@@ -142,14 +144,11 @@ def loss_function(logits, labels):
 #    Returns:
 #        loss: Loss tensor of type float.
     labels = tf.cast(labels,tf.float32)
-#    loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits= logits, labels = labels), name="loss")
-    loss = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits_v2(logits= logits, labels = labels), name="loss")
+    loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits= logits, labels = labels), name="loss")
     return loss
 
 def accuracy_function(logits, labels):
     accuracy = tf.reduce_sum(tf.cast(tf.equal(tf.argmax(logits,1), tf.argmax(labels,1)),tf.float32),name="acc")
-    print(logits)
-    print(labels)
     return accuracy
 
 def training(loss, learning_rate):
@@ -197,8 +196,12 @@ def parse(serialized_example):
     # Convert from a scalar string tensor
     image = tf.decode_raw(features['image_raw'], tf.uint8)
     image = tf.cast(image,tf.float32)
-    image = tf.reshape(image,[IMAGE_HEIGHT, IMAGE_WIDTH,1])
+    image_height = tf.cast(features['image_height'], tf.int32)
+    image_width = tf.cast(features['image_width'], tf.int32)
+    image = tf.reshape(image,[image_height, image_width,1])
 
+    ### 수정 필요
+    image = tf.image.resize_image_with_crop_or_pad(image=image, target_height=IMAGE_HEIGHT, target_width = IMAGE_WIDTH)
     label = tf.cast(features['label'], tf.int32)
     label = tf.one_hot(label,2)
     return image, label
@@ -234,7 +237,6 @@ def run_training():
 
         # Build a graph that computes predictions from the inference model.
         logits = inference(x, train, HIDDEN1_UNITS, MAXPOOL1_UNITS, HIDDEN2_UNITS, MAXPOOL2_UNITS, HIDDEN3_UNITS, MAXPOOL3_UNITS, HIDDEN4_UNITS, MAXPOOL4_UNITS, FC1_UNITS)
-        
         softmaxOut = tf.nn.softmax(logits,name="softmax")
 
         # loss
@@ -317,7 +319,21 @@ def run_training():
                     break
             saver.save(sess, 'checkpoints/radarOCC_model_'+folderName+signalType+'_fix.ckpt')
             print("Total time : {0} seconds".format(time.time()-start_time))
+            tf.train.write_graph(sess.graph.as_graph_def(), "./checkpoints/","graph.pb")
 
+            test_loss = 0.0
+            test_acc = 0.0
+            sess.run(test_iterator.initializer)
+            try:
+                while True:
+                    images, labels = sess.run([test_image_batch, test_label_batch])
+                    count += 1
+                    _, loss_val, acc_val = sess.run([logits,loss,accuracy], feed_dict={train:False,x:images, y:labels})
+                    test_acc += acc_val
+                    test_loss += loss_val
+            except tf.errors.OutOfRangeError:
+                pass
+            print('#####Finally test. test_loss : %.5f test_acc : %.5f' %(test_loss,test_acc))
 
 def test(filename):
     graph = tf.get_default_graph()
@@ -338,16 +354,11 @@ def test(filename):
     try:
         while True:
             images, labels = sess.run([test_image_batch, test_label_batch])
-            images = np.array(images)
-
-            labels = np.array(labels)
-            
             softmax= sess.run([out], feed_dict={train:False, x:images, y:labels})
-            softmax = np.squeeze(np.array(softmax),axis=0)
-            labels = np.array(labels)
+
             predict = np.argmax(softmax,1)
             groundTruth = np.argmax(labels,1)
-            errorNum += np.sum(abs(predict-groundTruth))
+            errorNum += sum(abs(predict-groundTruth))
 
     except tf.errors.OutOfRangeError:
         pass
@@ -355,8 +366,8 @@ def test(filename):
 
 def main():
     run_training()
-    test(TRAIN_FILE)
-    test(VALID_FILE)
-    test(TEST_FILE)
+#    test(TRAIN_FILE)
+#    test(VALID_FILE)
+#    test(TEST_FILE)
 if __name__ == '__main__':
     main()
